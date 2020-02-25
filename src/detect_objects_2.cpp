@@ -52,6 +52,8 @@ void detectObjects2()
     }
 
     // invoke forward propagation through network
+    double t = (double)cv::getTickCount();
+
     vector<cv::Mat> netOutput;
     net.setInput(blob);
     net.forward(netOutput, names);
@@ -104,6 +106,9 @@ void detectObjects2()
         
         bBoxes.push_back(bBox);
     }
+
+    t = ((double)cv::getTickCount() - t) / cv::getTickFrequency();
+    cout << 1000 * t / 1.0 << " ms" << endl;
     
     
     // show results
