@@ -13,7 +13,8 @@ using namespace std;
 void detectObjects2()
 {
     // load image from file
-    cv::Mat img = cv::imread("../images/s_thrun.jpg");
+    string image_name = "website.jpg";
+    cv::Mat img = cv::imread("../images/" + image_name);
 
     // load class names from file
     string yoloBasePath = "../dat/yolo/";
