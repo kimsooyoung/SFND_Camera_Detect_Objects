@@ -69,6 +69,8 @@ The target is set to CPU in the code, as opposed to using `DNN_TARGET_OPENCL`, w
 Blob is the standard array and unified memory interface for many frameworks, including Caffe. A blob is a wrapper over the actual data being processed and passed along and also provides synchronization capability between the CPU and the GPU
 
 More details on blobs can be found [here - Tutorial(net_layer_blob)](http://caffe.berkeleyvision.org/tutorial/net_layer_blob.html)
+
+
 More details about actual implementation can be found [here - Math Kernel Library for Deep Neural Networks](https://intel.github.io/mkl-dnn/understanding_memory_formats.html)
 
 ```c++
