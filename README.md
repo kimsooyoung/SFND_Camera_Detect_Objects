@@ -1,6 +1,6 @@
-# Sensor Fusion Self-Driving Car Course - Camera Detect Objects
+# Sensor Fusion Self-Driving Car Course - Detect Objects from Camera Images
 
-Automatically identify the vehicles in the scene using object detection with [YOLOv3](https://pjreddie.com/media/files/papers/YOLOv3.pdf)
+#### Automatically identify the vehicles in the scene using object detection with [YOLOv3](https://pjreddie.com/media/files/papers/YOLOv3.pdf)
 
 ### Project Status:
 
@@ -21,49 +21,65 @@ Automatically identify the vehicles in the scene using object detection with [YO
   * Mac: same deal as make - [install Xcode command line tools](https://developer.apple.com/xcode/features/)
   * Windows: recommend using [MinGW](http://www.mingw.org/)
 * yolo - pre-trained network’s weights
-  * 
+  * 'yolov3.cfg' : contains network configuration see more detail in [here](https://github.com/pjreddie/darknet/blob/master/cfg/yolov3.cfg)
+  * coco.names : contains the 80 different class names used in the [COCO dataset](https://github.com/pjreddie/darknet/blob/master/data/coco.names)
 
 ## Project Overview
 
-### 1. Show Lidar points on a top view
+#### Here's Main workflow steps
 
-<img width="1112" alt="show_top_view" src="https://user-images.githubusercontent.com/12381733/77241878-fe16d180-6c3b-11ea-89e6-56782ce04254.png">
+### 1. Initialize the Parameters
 
-#### Implementation Step
+* Every bounding box predicted by YOLOv3 is associated with a confidence score. The parameter 'confThreshold' is used to remove all bounding boxes with a lower score value.
 
-  1. Change the color of the Lidar points such that X=0.0m corresponds to red while X=20.0m is shown as green.
-  2. Remove all Lidar points on the road surface while preserving measurements on the obstacles in the scene.
+* Then, a non-maximum suppression is applied to the remaining bounding boxes. The NMS procedure is controlled by the parameter ‚nmsThreshold‘.
 
-### 2. Project Lidar Points to Camera Image Plane 
+* The size of the input image is controlled by the parameters ‚inpWidth‘ and ‚inpHeight‘, which is set to 416 as proposed by the YOLO authors. Other values could e.g. be 320 (faster) or 608 (more accurate).
 
-<img width="1354" alt="lidar_to_camera" src="https://user-images.githubusercontent.com/12381733/77241801-d07d5880-6c3a-11ea-8167-057c322f8317.png">
+### 2. Prepare the Model
 
-Here's few steps for doing projection from Lidar point cloud to camera image plane.
+* load the model weights as well as the associated model configuration
+```c++
+    // load image from file
+    cv::Mat img = cv::imread("./images/img1.png");
 
-  1. Convert each 3D point into homogeneous coordinates
-  2. Apply the projection equation
+    // load class names from file
+    string yoloBasePath = "./dat/yolo/";
+    string yoloClassesFile = yoloBasePath + "coco.names";
+    string yoloModelConfiguration = yoloBasePath + "yolov3.cfg";
+    string yoloModelWeights = yoloBasePath + "yolov3.weights"; 
 
-<img width="675" alt="공식" src="https://user-images.githubusercontent.com/12381733/77242026-a6796580-6c3d-11ea-9a94-0f8557bcfbfb.png">
+    vector<string> classes;
+    ifstream ifs(yoloClassesFile.c_str());
+    string line;
+    while (getline(ifs, line)) classes.push_back(line);
 
-  You must first know about some parameters
-
-    - Intrinsic camera calibration Mat > `"dat/calib_velo_to_cam.txt“`
+    // load neural network
+    cv::dnn::Net net = cv::dnn::readNetFromDarknet(yoloModelConfiguration, yoloModelWeights);
+    net.setPreferableBackend(cv::dnn::DNN_BACKEND_OPENCV);
+    net.setPreferableTarget(cv::dnn::DNN_TARGET_CPU);
 ```
-"calib_velo_to_cam.txt“
-calib_time: 15-Mar-2012 11:37:16
-R: 7.533745e-03 -9.999714e-01 -6.166020e-04 1.480249e-02 7.280733e-04 -9.998902e-01 9.998621e-01 7.523790e-03 1.480755e-02
 
-T: -4.069766e-03 -7.631618e-02 -2.717806e-01
-…
-```
-    - Extrinsic Mat for rotation and translation > `"dat/calib_cam_to_cam.txt“`
-```
-calib_time: 09-Jan-2012 13:57:47
-…
-R_rect_00: 9.999239e-01 9.837760e-03 -7.445048e-03 -9.869795e-03 9.999421e-01 -4.278459e-03 7.402527e-03 4.351614e-03 9.999631e-01
+If OpenCV is built with Intel’s Inference Engine, `DNN_BACKEND_INFERENCE_ENGINE` should be used instead. 
 
-P_rect_00: 7.215377e+02 0.000000e+00 6.095593e+02 0.000000e+00 0.000000e+00 7.215377e+02 1.728540e+02 0.000000e+00 0.000000e+00 0.000000e+00 1.000000e+00 0.000000e+00
-…
+The target is set to CPU in the code, as opposed to using `DNN_TARGET_OPENCL`, which would be the method of choice if a (Intel) GPU was available.
+
+### 3. Generate 4D Blob from Input Image
+
+Blob is the standard array and unified memory interface for many frameworks, including Caffe. A blob is a wrapper over the actual data being processed and passed along and also provides synchronization capability between the CPU and the GPU
+
+More details on blobs can be found [here - Tutorial(net_layer_blob)](http://caffe.berkeleyvision.org/tutorial/net_layer_blob.html)
+More details about actual implementation can be found [here - Math Kernel Library for Deep Neural Networks](https://intel.github.io/mkl-dnn/understanding_memory_formats.html)
+
+```c++
+    // generate 4D blob from input image
+    cv::Mat blob;
+    double scalefactor = 1/255.0;
+    cv::Size size = cv::Size(416, 416);
+    cv::Scalar mean = cv::Scalar(0,0,0);
+    bool swapRB = false;
+    bool crop = false;
+    cv::dnn::blobFromImage(img, blob, scalefactor, size, mean, swapRB, crop);
 ```
 
 > Those parameters and datasets provided from KITTI sensor setup
