@@ -84,12 +84,140 @@ More details about actual implementation can be found [here - Math Kernel Librar
     cv::dnn::blobFromImage(img, blob, scalefactor, size, mean, swapRB, crop);
 ```
 
-> Those parameters and datasets provided from KITTI sensor setup
+### 3. Generate 4D Blob from Input Image
 
-  3. Transform points back into Euclidean coordinates and store the result.
+The code below shows how an image loaded from the file is passed through the `blobFromImage` function to be converted into an input block for the neural network. 
+
+```c++
+    // generate 4D blob from input image
+    cv::Mat blob;
+    double scalefactor = 1/255.0;
+    cv::Size size = cv::Size(416, 416);
+    cv::Scalar mean = cv::Scalar(0,0,0);
+    bool swapRB = false;
+    bool crop = false;
+    cv::dnn::blobFromImage(img, blob, scalefactor, size, mean, swapRB, crop);
+```
+
+The pixel values are scaled with a scaling factor of 1/255 to a target range of 0 to 1. 
+
+It also adjusts the size of the image to the specified size of (416, 416, 416) without cropping.
+
+The output blob will be passed as input to the network. 
+
+Then, a forward pass will be executed to obtain a list of predicted bounding boxes as output from the network. 
+
+These boxes go through a post-processing step to filter out those with low confidence values.
+
+#### 4. Run Forward Pass Through the Network
+
+Run the forward-function of OpenCV to perform a single forward-pass through the network. 
+
+For that, It's needed to identify the last layer of the network and provide the associated internal names to the function. 
+
+This can be done by using the OpenCV function `getUnconnectedOutLayers`, which gives the names of all unconnected output layers, which are in fact the last layers of the network.
+
+
+The following code shows how this can be achieved:
+
+```c++
+    // Get names of output layers
+    vector<cv::String> names;
+    vector<int> outLayers = net.getUnconnectedOutLayers(); // get indices of output layers, i.e. layers with unconnected outputs
+    vector<cv::String> layersNames = net.getLayerNames(); // get names of all layers in the network
+
+    names.resize(outLayers.size());
+    for (size_t i = 0; i < outLayers.size(); ++i) // Get the names of the output layers in names
+    {
+        names[i] = layersNames[outLayers[i] - 1];
+    }
+
+    // invoke forward propagation through network
+    vector<cv::Mat> netOutput;
+    net.setInput(blob);
+    net.forward(netOutput, names);
+```
+
+The output of the network is a vector of size C (the number of blob classes) with the first four elements in each class representing the center in x, the center in y as well as the width and height of the associated bounding box. 
+
+The fifth element represents the trust or confidence that the respective bounding box actually encloses an object. 
+
+The remaining elements of the matrix are the confidence associated with each of the classes contained in the `coco.cfg` file. 
+
+Each box is assigned to the class corresponding to the highest confidence.
+
+Here's an example of confidence format from [`yolov3.cfg`](https://github.com/pjreddie/darknet/blob/master/cfg/yolov3.cfg)
+
+```
+[net]
+# Testing
+# batch=1
+# subdivisions=1
+# Training
+batch=64
+subdivisions=16
+width=608
+height=608
+channels=3
+momentum=0.9
+decay=0.0005
+angle=0
+saturation = 1.5
+exposure = 1.5
+hue=.1
+...
+```
+
+The following code shows how to scan through the network results and assemble the bounding boxes with a sufficiently high confidence score into a vector. 
+
+The function `cv::minMaxLoc` finds the minimum and maximum element values and their positions with extremums searched across the whole array.
+
+```c++
+    // Scan through all bounding boxes and keep only the ones with high confidence
+    float confThreshold = 0.20;
+    vector<int> classIds;
+    vector<float> confidences;
+    vector<cv::Rect> boxes;
+    for (size_t i = 0; i < netOutput.size(); ++i)
+    {
+        float* data = (float*)netOutput[i].data;
+        for (int j = 0; j < netOutput[i].rows; ++j, data += netOutput[i].cols)
+        {
+            cv::Mat scores = netOutput[i].row(j).colRange(5, netOutput[i].cols);
+            cv::Point classId;
+            double confidence;
+
+            // Get the value and location of the maximum score
+            cv::minMaxLoc(scores, 0, &confidence, 0, &classId);
+            if (confidence > confThreshold)
+            {
+                cv::Rect box; int cx, cy;
+                cx = (int)(data[0] * img.cols);
+                cy = (int)(data[1] * img.rows);
+                box.width = (int)(data[2] * img.cols);
+                box.height = (int)(data[3] * img.rows);
+                box.x = cx - box.width/2; // left
+                box.y = cy - box.height/2; // top
+
+                boxes.push_back(box);
+                classIds.push_back(classId.x);
+                confidences.push_back((float)confidence);
+            }
+        }
+    }
+```
+
+### 5. Post-Processing of Network Output
+
+Apply non-maximum suppression, for remove redundant bounding boxes. 
+
+The following figure shows the results, where green indicates preserved bounding boxes while red bounding boxes have been removed during NMS.
+
+
 
 ---
  ### Reference
   * [Darknet](https://github.com/pjreddie/darknet)
+  * [YOLO: Real Time Object Detection](https://github.com/pjreddie/darknet/wiki/YOLO:-Real-Time-Object-Detection)
   * [Udacity Sensor Fusion Nanodegree](https://www.udacity.com/course/sensor-fusion-engineer-nanodegree--nd313)
 
