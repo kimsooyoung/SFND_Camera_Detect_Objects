@@ -213,7 +213,7 @@ Apply non-maximum suppression, for remove redundant bounding boxes.
 
 The following figure shows the results, where green indicates preserved bounding boxes while red bounding boxes have been removed during NMS.
 
-
+<img width="766" alt="nms_detect" src="https://user-images.githubusercontent.com/12381733/77242635-d75c9900-6c43-11ea-88eb-5301ba56aa8b.png">
 
 ---
  ### Reference
